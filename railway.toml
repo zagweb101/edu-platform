@@ -1,0 +1,114 @@
+# Railway configuration
+# Docs: https://docs.railway.app/reference/config-as-code
+#
+# This file defines two services:
+#   1. web     — the Next.js app (production server)
+#   2. worker  — the BullMQ background worker
+#
+# Both share the same codebase but have different start commands.
+# Railway will automatically provision Postgres + Redis plugins.
+
+[config]
+# Postgres database — Railway will inject DATABASE_URL automatically
+# Redis cache — Railway will inject REDIS_URL automatically
+
+# ====================
+# Service 1: Next.js Web App
+# ====================
+[[services]]
+name = "web"
+source = "."
+
+[services.build]
+builder = "nixpacks"
+buildCommand = "bun install && bun run db:generate && bun run build"
+
+[services.start]
+command = "bun run start"
+
+# Healthcheck — Railway will hit this URL to know when the app is up
+[services.healthcheck]
+path = "/api/health"
+interval = 30
+timeout = 10
+gracePeriod = 60
+
+# Autoscaling (optional — only enable on paid plans)
+[services.scaling]
+minInstances = 1
+maxInstances = 1
+
+# Environment variables required at runtime
+# (Railway injects these automatically from plugins/variables)
+[[services.variables]]
+# Database & cache (auto-injected by Railway Postgres + Redis plugins)
+# DATABASE_URL = "${{Postgres.DATABASE_URL}}"
+# REDIS_URL = "${{Redis.REDIS_URL}}"
+
+# Auth — must be set manually
+AUTH_SECRET = "${{AUTH_SECRET}}"
+AUTH_URL = "${{RAILWAY_PUBLIC_DOMAIN}}"
+NEXTAUTH_URL = "${{RAILWAY_PUBLIC_DOMAIN}}"
+
+# OAuth providers (optional — set if using Google/GitHub login)
+AUTH_GOOGLE_ID = "${{AUTH_GOOGLE_ID}}"
+AUTH_GOOGLE_SECRET = "${{AUTH_GOOGLE_SECRET}}"
+AUTH_GITHUB_ID = "${{AUTH_GITHUB_ID}}"
+AUTH_GITHUB_SECRET = "${{AUTH_GITHUB_SECRET}}"
+
+# Moyasar (optional — set if using payments)
+MOYASAR_SECRET_KEY = "${{MOYASAR_SECRET_KEY}}"
+MOYASAR_PUBLISHABLE_KEY = "${{MOYASAR_PUBLISHABLE_KEY}}"
+MOYASAR_WEBHOOK_SECRET = "${{MOYASAR_WEBHOOK_SECRET}}"
+
+# Resend (optional — set if sending emails)
+RESEND_API_KEY = "${{RESEND_API_KEY}}"
+EMAIL_FROM = "${{EMAIL_FROM}}"
+
+# Firebase FCM (optional — set if sending push notifications)
+FIREBASE_PROJECT_ID = "${{FIREBASE_PROJECT_ID}}"
+FIREBASE_CLIENT_EMAIL = "${{FIREBASE_CLIENT_EMAIL}}"
+FIREBASE_PRIVATE_KEY = "${{FIREBASE_PRIVATE_KEY}}"
+
+# UploadThing (optional — set if using file uploads)
+UPLOADTHING_SECRET = "${{UPLOADTHING_SECRET}}"
+UPLOADTHING_APP_ID = "${{UPLOADTHING_APP_ID}}"
+
+# Sentry (optional)
+SENTRY_DSN = "${{SENTRY_DSN}}"
+
+# App config
+NEXT_PUBLIC_APP_NAME = "${{NEXT_PUBLIC_APP_NAME}}"
+NEXT_PUBLIC_APP_URL = "${{RAILWAY_PUBLIC_DOMAIN}}"
+NEXT_PUBLIC_DEFAULT_LOCALE = "${{NEXT_PUBLIC_DEFAULT_LOCALE}}"
+NODE_ENV = "production"
+
+# ====================
+# Service 2: Background Worker
+# ====================
+[[services]]
+name = "worker"
+source = "."
+
+[services.build]
+builder = "nixpacks"
+buildCommand = "bun install && bun run db:generate"
+
+[services.start]
+command = "bun run worker:start"
+
+[services.scaling]
+minInstances = 1
+maxInstances = 1
+
+[[services.variables]]
+# Same env vars as web service (worker needs DB + Redis + email + push)
+# DATABASE_URL = "${{Postgres.DATABASE_URL}}"
+# REDIS_URL = "${{Redis.REDIS_URL}}"
+RESEND_API_KEY = "${{RESEND_API_KEY}}"
+EMAIL_FROM = "${{EMAIL_FROM}}"
+FIREBASE_PROJECT_ID = "${{FIREBASE_PROJECT_ID}}"
+FIREBASE_CLIENT_EMAIL = "${{FIREBASE_CLIENT_EMAIL}}"
+FIREBASE_PRIVATE_KEY = "${{FIREBASE_PRIVATE_KEY}}"
+SENTRY_DSN = "${{SENTRY_DSN}}"
+NODE_ENV = "production"

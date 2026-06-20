@@ -1,0 +1,317 @@
+// ===================================================================
+// Boilerplate Prisma Schema — supports SQLite (local dev) and PostgreSQL (production)
+// To switch to PostgreSQL for production:
+//   1. Change `provider = "sqlite"` to `provider = "postgresql"`
+//   2. Set DATABASE_URL to your Railway Postgres connection string
+//   3. Run `bun run db:push`
+// See docs/SETUP.md for full instructions.
+// ===================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Default: sqlite for local development (zero-config).
+  // Switch to "postgresql" when deploying to Railway.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================================================
+// Authentication — NextAuth v5 + Prisma Adapter
+// ===================================================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String? // for credentials provider
+  role          Role      @default(USER)
+  locale        String    @default("ar") // ar | en
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+
+  // Notification preferences
+  notifyEmail   Boolean @default(true)
+  notifyPush    Boolean @default(true)
+  notifyInApp   Boolean @default(true)
+
+  // FCM tokens (one user can have many devices)
+  fcmTokens     FcmToken[]
+
+  accounts      Account[]
+  sessions      Session[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  payments      Payment[]
+  subscriptions Subscription[]
+  files         UploadFile[]
+  roleAssignments RoleAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  ipAddress    String?
+  userAgent    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ===================================================================
+// RBAC — Roles & Permissions (relation table for future multi-role)
+// ===================================================================
+
+model RoleAssignment {
+  id     String   @id @default(cuid())
+  userId String
+  role   Role
+  scope  String? // optional scope like "team:abc"
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, role, scope])
+  @@index([userId])
+}
+
+// ===================================================================
+// Notifications — In-app + Email + Push
+// ===================================================================
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   @default("info") // info | success | warning | error
+  link      String?
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(PENDING)
+  metadata  Json?
+  readAt    DateTime?
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model FcmToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String?  // web | ios | android
+  userAgent String?
+  lastUsedAt DateTime?
+  isActive  Boolean  @default(true)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// ===================================================================
+// Payments — Moyasar
+// ===================================================================
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+enum PaymentMethod {
+  CREDITCARD
+  APPLEPAY
+  STCPAY
+  MADA
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  userId          String
+  moyasarId       String   @unique // moyasar payment id
+  amount          Float    // SAR (use Decimal in production with Postgres)
+  currency        String   @default("SAR")
+  status          PaymentStatus @default(INITIATED)
+  method          PaymentMethod?
+  description     String?
+  source          Json? // full source object from moyasar
+  metadata        Json?
+  invoiceId       String?
+  refundedAmount  Float    @default(0)
+  failureReason   String?
+  callbackUrl     String?
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription    Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  subscriptionId  String?        @unique
+  auditLogs       AuditLog[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([userId, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  EXPIRED
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  moyasarId        String?  @unique // moyasar subscription id (token)
+  planId           String   // e.g. "pro", "team"
+  status           SubscriptionStatus @default(TRIALING)
+  amount           Float    // SAR
+  currency         String   @default("SAR")
+  interval         String   @default("month") // month | year
+  currentPeriodEnd DateTime
+  canceledAt       DateTime?
+  trialEndsAt      DateTime?
+  metadata         Json?
+
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments         Payment[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([userId, status])
+  @@index([status])
+}
+
+// ===================================================================
+// Audit Log — track all sensitive actions
+// ===================================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String // e.g. "user.login", "payment.refund"
+  entity    String? // e.g. "User", "Payment"
+  entityId  String?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  paymentId String?
+
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  payment   Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ===================================================================
+// UploadThing — track uploaded files metadata
+// ===================================================================
+
+model UploadFile {
+  id          String   @id @default(cuid())
+  userId      String
+  fileKey     String   @unique
+  fileName    String
+  fileSize    Int
+  fileType    String
+  fileUrl     String
+  metadata    Json?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ===================================================================
+// System Settings — key/value store for runtime config
+// ===================================================================
+
+model Setting {
+  key       String   @id
+  value     String
+  type      String   @default("string") // string | number | boolean | json
+  updatedAt DateTime @updatedAt
+}
