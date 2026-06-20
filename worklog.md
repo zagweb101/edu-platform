@@ -81,3 +81,39 @@ Stage Summary:
 - Dev server runs cleanly on port 3000
 - Lint + tests pass
 - Boilerplate is production-ready and reusable
+
+---
+Task ID: 3
+Agent: main (Super Z) - comprehensive testing session
+Task: Run end-to-end tests of the boilerplate covering auth, dashboard, i18n, theme, APIs, RBAC, mobile, and 404 handling
+
+Work Log:
+- Verified dev server running on port 3000 (Next.js 16.1.3 Turbopack)
+- TEST 1: Arabic landing page — renders with RTL, all nav items in Arabic, no console errors
+- TEST 2: Registration page — form has 4 fields (name, email, password, confirm password), submitted successfully (POST /api/auth/register → 201), redirected to login page
+- TEST 3: Login as admin@boilerplate.dev — form submission via Enter key, POST /api/auth/callback/credentials → 200, redirected to /ar/dashboard
+- TEST 4: Dashboard Overview — verified KPIs (5 users, SAR 299.98 revenue, 3 successful payments, 0 active subscriptions), charts (revenue growth + user growth), recent payments list, recent activity (audit log), latest users table
+- TEST 5: Users page — table shows all 5 users with name/email/role/status/lastLogin
+- TEST 6: Payments page — KPIs + table with 4 sample payments (3 paid + 1 failed), shows Apple Pay and credit card methods, Arabic SAR currency formatting
+- TEST 7: Notifications page — empty state, notification preferences toggles (in-app/email/push)
+- TEST 8: Audit Log page — table with all audit entries (user.login, user.register) with timestamps and IP addresses
+- TEST 9: Analytics page — KPIs + revenue growth chart + user growth chart
+- TEST 10: Settings page — Service Status shows: PostgreSQL ✓, NextAuth ✓, Moyasar/Resend/Firebase/Redis/Sentry/UploadThing all "Not set"
+- TEST 11: Language switch — discovered bug in toggleLocale function (didn't include locale prefix for Arabic when localePrefix='always'). Fixed in src/components/dashboard/topbar.tsx. After fix, EN→AR and AR→EN both work correctly with proper dir attribute switch (rtl/ltr)
+- TEST 12: Dark/Light theme toggle — works via JS click, document.documentElement.className switches between 'light' and 'dark'
+- TEST 13: API endpoints (unauthenticated) — /api/health returns healthy+ok+ok; /api/notifications, /api/users, /api/users/me, /api/payments, /api/audit all return 401 UNAUTHORIZED as expected
+- TEST 14: API endpoints (authenticated as admin) — all return 200 with proper data: /api/notifications returns items[], /api/notifications?count=unread returns count, /api/users/me returns admin profile, /api/audit returns audit entries with user info, /api/users returns paginated user list
+- TEST 15: Login as regular user (user@boilerplate.dev/user12345) — login successful, dashboard shows but sidebar only shows Overview + Notifications (RBAC hides admin-only items)
+- TEST 16: RBAC verification — regular user trying /dashboard/users or /dashboard/audit redirects to /ar/forbidden page. API calls to /api/users and /api/audit return 403 Forbidden
+- TEST 17: Mobile responsiveness (390x844 viewport) — sidebar hides, mobile toggle button appears, layout adapts correctly
+- TEST 18: 404 page — /ar/nonexistent-page shows "404 Page not found" with Go home link
+- TEST 19: Protected routes — after clearing cookies, accessing /ar/dashboard redirects to /ar/auth/login?callbackUrl=... (correct middleware behavior)
+- TEST 20: `bun run lint` — passes with 0 errors
+- TEST 21: `bun run test` — 12/12 unit tests pass (RBAC + password + format)
+
+Stage Summary:
+- All 21 test scenarios PASSED
+- Found and fixed 1 bug: toggleLocale() function in topbar.tsx was not prepending the locale prefix for Arabic, causing the language switch to fail silently when localePrefix='always' is enabled
+- All features verified working: auth (login/register/signout), dashboard (7 pages), i18n (AR/EN with RTL/LTR), theme (dark/light), APIs (5 endpoints with auth), RBAC (admin vs user role enforcement), mobile responsiveness, 404 handling, protected routes
+- Lint passes, 12 unit tests pass
+- 20+ screenshots saved to /home/z/my-project/download/test-*.png

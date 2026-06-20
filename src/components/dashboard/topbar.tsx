@@ -66,7 +66,8 @@ export function DashboardTopbar() {
     if (pathname) {
       // Strip current locale prefix
       const stripped = pathname.replace(/^\/(ar|en)/, '') || '/';
-      const next = newLocale === 'ar' ? stripped : `/${newLocale}${stripped}`;
+      // Always include the new locale prefix (localePrefix: 'always')
+      const next = `/${newLocale}${stripped === '/' ? '' : stripped}`;
       router.push(next);
     }
   }
